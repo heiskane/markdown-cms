@@ -1,3 +1,4 @@
+use actix_files;
 use actix_web::{
     get, http::header::ContentType, middleware::Logger, web, App, HttpResponse, HttpServer,
 };
@@ -5,8 +6,9 @@ use askama::Template;
 use std::{collections::HashMap, fs, path::PathBuf};
 
 #[derive(Template)]
-#[template(path = "hello.html")]
+#[template(path = "layout.html")]
 struct Post<'a> {
+    // TODO: Add implemetation for FromStr that parses the metadata and all that good good juice
     name: &'a str,
     content: &'a str,
 }
@@ -55,6 +57,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Logger::default())
             .app_data(posts.clone())
+            .service(actix_files::Files::new("/static", "./static"))
             .service(post)
     })
     .bind(("127.0.0.1", 8080))?
