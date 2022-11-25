@@ -9,4 +9,8 @@ edition = "2021"
 actix-files = "0.6.2"
 actix-web = "4"
 askama = { git = "https://github.com/djc/askama", version = "0.11.2", features = ["markdown"] }
+chrono = { version = "0.4.23", features = ["serde"] }
 env_logger = "0.9.3"
+regex = "1.7.0"
+serde = { version = "1.0.147", features = ["derive"] }
+serde_yaml = "0.9.14"

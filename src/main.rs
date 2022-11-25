@@ -1,31 +1,52 @@
-use actix_files;
 use actix_web::{
     get, http::header::ContentType, middleware::Logger, web, App, HttpResponse, HttpServer,
 };
+use actix_files;
 use askama::Template;
+use chrono::{DateTime, Local};
+use serde::Deserialize;
+use regex::Regex;
 use std::{collections::HashMap, fs, path::PathBuf};
 
 #[derive(Template)]
 #[template(path = "layout.html")]
 struct Post<'a> {
-    // TODO: Add implemetation for FromStr that parses the metadata and all that good good juice
     name: &'a str,
     content: &'a str,
+    metadata: PostMetadata<'a>,
+}
+
+#[derive(Deserialize)]
+struct PostMetadata<'a> {
+    title: Option<&'a str>,
+    description: &'a str,
+    date: DateTime<Local>,
 }
 
 #[get("/posts/{post}/")]
 async fn post(post: web::Path<String>, posts: web::Data<HashMap<String, PathBuf>>) -> HttpResponse {
     let post_name = post.into_inner();
+    
     if !posts.contains_key(&post_name) {
         return HttpResponse::NotFound().body("Post not found");
     }
+
+    let content = fs::read_to_string(posts.get(&post_name).unwrap()).unwrap();
+    let re = Regex::new(r"^---([\s\S]*?)(\n---)").unwrap();
+    let metadata = re.captures(&content).expect("Getting metadata from markdown").get(1).unwrap().as_str();
+    let stripped_content = re.replace(&content, "").into_owned();
+
+    let meta_obj: PostMetadata = serde_yaml::from_str(metadata).unwrap();
+
     let response = Post {
         name: &post_name,
-        content: &fs::read_to_string(posts.get(&post_name).unwrap()).unwrap(),
+        content: &stripped_content,
+        metadata: meta_obj,
     };
-    return HttpResponse::Ok()
+
+    HttpResponse::Ok()
         .content_type(ContentType::html())
-        .body(response.render().unwrap());
+        .body(response.render().unwrap())
 }
 
 fn get_posts() -> HashMap<String, PathBuf> {

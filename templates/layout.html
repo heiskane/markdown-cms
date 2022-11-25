@@ -5,12 +5,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/static/style.css" />
-    <title>{{name}}</title>
+
+    {% match metadata.title -%}
+        {% when Some with (val) -%}
+	    <title>{{ val }}</title>
+	{% when None -%}
+	    <title>Default title</title>
+    {% endmatch -%}
+
+    <meta name="description" content="{{metadata.description}}">
 </head>
 
 <body>
+    <p>Header here plz</p>
+    <p>Posted: {{ metadata.date.date_naive() }}</p>
     <div class="content">
-        {{content|markdown}}
+        {{ content|markdown }}
     </div>
 </body>
 
