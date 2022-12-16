@@ -1,1 +1,7 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<p>Posted: {{ metadata.date.date_naive() }}</p>
 {{content|markdown}}
+
+{% endblock %}

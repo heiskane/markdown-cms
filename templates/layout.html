@@ -18,9 +18,8 @@
 
 <body>
     <p>Header here plz</p>
-    <p>Posted: {{ metadata.date.date_naive() }}</p>
     <div class="content">
-        {{ content|markdown }}
+	    {% block content %}{% endblock %}
     </div>
 </body>
 

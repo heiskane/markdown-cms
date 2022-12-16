@@ -3,13 +3,20 @@ use actix_web::{
 };
 use actix_files;
 use askama::Template;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use regex::Regex;
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf, str::FromStr, borrow::Cow, rc::Rc};
+
 
 #[derive(Template)]
-#[template(path = "layout.html")]
+#[template(path = "index.html")]
+struct Index {
+    posts: Vec<String>,
+}
+
+#[derive(Template)]
+#[template(path = "hello.html")]
 struct Post<'a> {
     name: &'a str,
     content: &'a str,
@@ -20,7 +27,7 @@ struct Post<'a> {
 struct PostMetadata<'a> {
     title: Option<&'a str>,
     description: &'a str,
-    date: DateTime<Local>,
+    date: DateTime<Utc>,
 }
 
 #[get("/posts/{post}/")]
@@ -38,7 +45,7 @@ async fn post(post: web::Path<String>, posts: web::Data<HashMap<String, PathBuf>
 
     let meta_obj: PostMetadata = serde_yaml::from_str(metadata).unwrap();
 
-    let response = Post {
+    let post = Post {
         name: &post_name,
         content: &stripped_content,
         metadata: meta_obj,
@@ -46,25 +53,33 @@ async fn post(post: web::Path<String>, posts: web::Data<HashMap<String, PathBuf>
 
     HttpResponse::Ok()
         .content_type(ContentType::html())
-        .body(response.render().unwrap())
+        .body(post.render().unwrap())
 }
 
-fn get_posts() -> HashMap<String, PathBuf> {
-    let paths = fs::read_dir("./content").unwrap();
+#[get("/")]
+async fn index(posts: web::Data<HashMap<String, PathBuf>>) -> HttpResponse {
+    let index = Index {
+        posts: posts.keys().into_iter().map(|s| s.to_string()).collect::<Vec<String>>()
+    };
 
-    let mut posts = HashMap::new();
-    for dir in paths.into_iter() {
-        let path = dir.unwrap().path();
-        posts.insert(
+    HttpResponse::Ok().content_type(ContentType::html()).body(index.render().unwrap())
+}
+
+fn get_posts(content_path: &str) -> HashMap<String, PathBuf> {
+    let paths = fs::read_dir(content_path).unwrap();
+
+    paths.into_iter().fold(HashMap::new(), |mut a, d| {
+        let path = d.unwrap().path();
+        a.insert(
             path.file_stem()
-                .unwrap()
-                .to_os_string()
-                .into_string()
-                .unwrap(),
+            .unwrap()
+            .to_os_string()
+            .into_string()
+            .unwrap(),
             path,
         );
-    }
-    posts
+        a
+    })
 }
 
 #[actix_web::main]
@@ -72,7 +87,7 @@ async fn main() -> std::io::Result<()> {
     // access logs are printed with the INFO level so ensure it is enabled by default
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let posts = web::Data::new(get_posts());
+    let posts = web::Data::new(get_posts("./content"));
 
     HttpServer::new(move || {
         App::new()
@@ -80,8 +95,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(posts.clone())
             .service(actix_files::Files::new("/static", "./static"))
             .service(post)
+            .service(index)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
     .await
 }
+
