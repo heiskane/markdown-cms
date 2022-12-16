@@ -6,7 +6,7 @@ use askama::Template;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use regex::Regex;
-use std::{collections::HashMap, fs, path::PathBuf, str::FromStr, borrow::Cow, rc::Rc};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 
 #[derive(Template)]
@@ -27,7 +27,7 @@ struct Post<'a> {
 struct PostMetadata<'a> {
     title: Option<&'a str>,
     description: &'a str,
-    date: DateTime<Utc>,
+    date: DateTime<Utc>,  // Maybe use last modified date on the file?
 }
 
 #[get("/posts/{post}/")]
