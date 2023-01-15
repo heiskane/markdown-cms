@@ -14,7 +14,7 @@ use std::{collections::HashMap, fs};
 struct Post<'a> {
     name: &'a str,
     content: &'a str,
-    metadata: PostMetadata,
+    metadata: &'a PostMetadata,
 }
 
 struct InternalPost {
@@ -29,7 +29,7 @@ struct PostListing<'a> {
     posts: Vec<&'a InternalPost>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize)]
 struct PostMetadata {
     title: Option<String>,
     description: String,
@@ -58,7 +58,7 @@ async fn post<'a>(post: web::Path<String>, posts: web::Data<HashMap<String, Inte
     let post_template = Post {
         name: &internal_post.name,
         content: &internal_post.content,
-        metadata: internal_post.metadata.clone(),
+        metadata: &internal_post.metadata,
     };
 
     HttpResponse::Ok()
@@ -69,7 +69,7 @@ async fn post<'a>(post: web::Path<String>, posts: web::Data<HashMap<String, Inte
 fn get_posts(content_path: &str) -> HashMap<String, InternalPost> {
     let paths = fs::read_dir(content_path).unwrap();
 
-    let post_map: HashMap<String, InternalPost> = paths.into_iter().fold(HashMap::new(), |mut a, d| {
+    paths.into_iter().fold(HashMap::new(), |mut a, d| {
         let path = d.unwrap().path();
         let post_name = path.file_stem()
             .unwrap()
@@ -81,7 +81,7 @@ fn get_posts(content_path: &str) -> HashMap<String, InternalPost> {
         let metadata = re.captures(&content).expect("Getting metadata from markdown").get(1).unwrap().as_str();
         let stripped_content = re.replace(&content, "").into_owned();
 
-        let meta_obj: PostMetadata = serde_yaml::from_str(metadata).unwrap();
+        let meta_obj = serde_yaml::from_str(metadata).unwrap();
 
         a.insert(post_name.to_string(), InternalPost {
             name: post_name.to_string(),
@@ -89,9 +89,8 @@ fn get_posts(content_path: &str) -> HashMap<String, InternalPost> {
             metadata: meta_obj,
         });
         a
-    });
+    })
 
-    post_map
 
     
 }
