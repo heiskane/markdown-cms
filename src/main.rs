@@ -90,9 +90,6 @@ fn get_posts(content_path: &str) -> HashMap<String, InternalPost> {
         });
         a
     })
-
-
-    
 }
 
 #[actix_web::main]
@@ -115,3 +112,20 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::get_posts;
+
+    #[test]
+    fn test_post_gen() {
+        let posts = get_posts("./test_content");
+
+        assert_eq!(posts.len(), 1);
+
+        let post = posts.get("potato").unwrap();
+
+        assert_eq!(post.name, "potato");
+        assert_eq!(post.metadata.title, Some("imma title".to_string()));
+        assert_eq!(post.metadata.description, "imma description");
+    }
+}
