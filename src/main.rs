@@ -23,6 +23,12 @@ struct Post<'a> {
     metadata: PostMetadata<'a>,
 }
 
+#[derive(Template)]
+#[template(path = "listing.html")]
+struct PostListing {
+    posts: Vec<String>,
+}
+
 #[derive(Deserialize)]
 struct PostMetadata<'a> {
     title: Option<&'a str>,
@@ -30,10 +36,21 @@ struct PostMetadata<'a> {
     date: DateTime<Utc>,  // Maybe use last modified date on the file?
 }
 
+#[get("/posts/")]
+async fn post_listing(posts: web::Data<HashMap<String, PathBuf>>) -> HttpResponse {
+    let names = posts.clone().into_inner().keys().map(|n| n.to_owned()).collect();
+    let posts = PostListing {
+        posts: names,
+    };
+    HttpResponse::Ok()
+        .content_type(ContentType::html())
+        .body(posts.render().unwrap())
+}
+
 #[get("/posts/{post}/")]
 async fn post(post: web::Path<String>, posts: web::Data<HashMap<String, PathBuf>>) -> HttpResponse {
     let post_name = post.into_inner();
-    
+
     if !posts.contains_key(&post_name) {
         return HttpResponse::NotFound().body("Post not found");
     }
@@ -94,6 +111,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .app_data(posts.clone())
             .service(actix_files::Files::new("/static", "./static"))
+            .service(post_listing)
             .service(post)
             .service(index)
     })
