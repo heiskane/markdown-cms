@@ -1,5 +1,13 @@
-<h1>Posts</h1>
-{% for asdf in posts %}
-<p>{{ asdf }}</p>
-{% endfor %}
+{% extends "layout.html" %}
+{% block content %}
 
+<h1>Posts</h1>
+<ul>
+    {% for post_data in posts %}
+        <li>
+            <a href="/posts/{{ post_data.name }}/">{{ post_data.name }} - {{ post_data.metadata.description }}</a>
+        </li>
+    {% endfor %}
+</ul>
+
+{% endblock %}

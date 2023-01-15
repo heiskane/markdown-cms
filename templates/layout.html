@@ -6,14 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/static/style.css" />
 
-    {% match metadata.title -%}
-        {% when Some with (val) -%}
-	    <title>{{ val }}</title>
-	{% when None -%}
-	    <title>Default title</title>
-    {% endmatch -%}
+    <title>Title here pls</title>
 
-    <meta name="description" content="{{metadata.description}}">
+    <meta name="description" content="description here pls">
 </head>
 
 <body>

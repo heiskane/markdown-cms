@@ -6,41 +6,40 @@ use askama::Template;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use regex::Regex;
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs};
 
-
-#[derive(Template)]
-#[template(path = "index.html")]
-struct Index {
-    posts: Vec<String>,
-}
 
 #[derive(Template)]
 #[template(path = "hello.html")]
 struct Post<'a> {
     name: &'a str,
     content: &'a str,
-    metadata: PostMetadata<'a>,
+    metadata: PostMetadata,
+}
+
+struct InternalPost {
+    name: String,
+    content: String,
+    metadata: PostMetadata,
 }
 
 #[derive(Template)]
 #[template(path = "listing.html")]
-struct PostListing {
-    posts: Vec<String>,
+struct PostListing<'a> {
+    posts: Vec<&'a InternalPost>,
 }
 
-#[derive(Deserialize)]
-struct PostMetadata<'a> {
-    title: Option<&'a str>,
-    description: &'a str,
+#[derive(Deserialize, Clone)]
+struct PostMetadata {
+    title: Option<String>,
+    description: String,
     date: DateTime<Utc>,  // Maybe use last modified date on the file?
 }
 
-#[get("/posts/")]
-async fn post_listing(posts: web::Data<HashMap<String, PathBuf>>) -> HttpResponse {
-    let names = posts.clone().into_inner().keys().map(|n| n.to_owned()).collect();
+#[get("/")]
+async fn post_listing(posts: web::Data<HashMap<String, InternalPost>>) -> HttpResponse {
     let posts = PostListing {
-        posts: names,
+        posts: posts.values().collect(),
     };
     HttpResponse::Ok()
         .content_type(ContentType::html())
@@ -48,55 +47,53 @@ async fn post_listing(posts: web::Data<HashMap<String, PathBuf>>) -> HttpRespons
 }
 
 #[get("/posts/{post}/")]
-async fn post(post: web::Path<String>, posts: web::Data<HashMap<String, PathBuf>>) -> HttpResponse {
+async fn post<'a>(post: web::Path<String>, posts: web::Data<HashMap<String, InternalPost>>) -> HttpResponse {
     let post_name = post.into_inner();
 
     if !posts.contains_key(&post_name) {
         return HttpResponse::NotFound().body("Post not found");
     }
 
-    let content = fs::read_to_string(posts.get(&post_name).unwrap()).unwrap();
-    let re = Regex::new(r"^---([\s\S]*?)(\n---)").unwrap();
-    let metadata = re.captures(&content).expect("Getting metadata from markdown").get(1).unwrap().as_str();
-    let stripped_content = re.replace(&content, "").into_owned();
-
-    let meta_obj: PostMetadata = serde_yaml::from_str(metadata).unwrap();
-
-    let post = Post {
-        name: &post_name,
-        content: &stripped_content,
-        metadata: meta_obj,
+    let internal_post = posts.get(&post_name).unwrap();
+    let post_template = Post {
+        name: &internal_post.name,
+        content: &internal_post.content,
+        metadata: internal_post.metadata.clone(),
     };
 
     HttpResponse::Ok()
         .content_type(ContentType::html())
-        .body(post.render().unwrap())
+        .body(post_template.render().unwrap())
 }
 
-#[get("/")]
-async fn index(posts: web::Data<HashMap<String, PathBuf>>) -> HttpResponse {
-    let index = Index {
-        posts: posts.keys().into_iter().map(|s| s.to_string()).collect::<Vec<String>>()
-    };
-
-    HttpResponse::Ok().content_type(ContentType::html()).body(index.render().unwrap())
-}
-
-fn get_posts(content_path: &str) -> HashMap<String, PathBuf> {
+fn get_posts(content_path: &str) -> HashMap<String, InternalPost> {
     let paths = fs::read_dir(content_path).unwrap();
 
-    paths.into_iter().fold(HashMap::new(), |mut a, d| {
+    let post_map: HashMap<String, InternalPost> = paths.into_iter().fold(HashMap::new(), |mut a, d| {
         let path = d.unwrap().path();
-        a.insert(
-            path.file_stem()
+        let post_name = path.file_stem()
             .unwrap()
             .to_os_string()
             .into_string()
-            .unwrap(),
-            path,
-        );
+            .unwrap();
+        let content = fs::read_to_string(path).unwrap();
+        let re = Regex::new(r"^---([\s\S]*?)(\n---)").unwrap();
+        let metadata = re.captures(&content).expect("Getting metadata from markdown").get(1).unwrap().as_str();
+        let stripped_content = re.replace(&content, "").into_owned();
+
+        let meta_obj: PostMetadata = serde_yaml::from_str(metadata).unwrap();
+
+        a.insert(post_name.to_string(), InternalPost {
+            name: post_name.to_string(),
+            content: stripped_content,
+            metadata: meta_obj,
+        });
         a
-    })
+    });
+
+    post_map
+
+    
 }
 
 #[actix_web::main]
@@ -113,7 +110,6 @@ async fn main() -> std::io::Result<()> {
             .service(actix_files::Files::new("/static", "./static"))
             .service(post_listing)
             .service(post)
-            .service(index)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
