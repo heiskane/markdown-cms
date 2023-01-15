@@ -66,6 +66,8 @@ async fn post<'a>(post: web::Path<String>, posts: web::Data<HashMap<String, Inte
         .body(post_template.render().unwrap())
 }
 
+
+// TODO: Add better error handling by returning result?
 fn get_posts(content_path: &str) -> HashMap<String, InternalPost> {
     let paths = fs::read_dir(content_path).unwrap();
 
