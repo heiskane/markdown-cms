@@ -1,28 +1,27 @@
+use actix_files;
 use actix_web::{
     get, http::header::ContentType, middleware::Logger, web, App, HttpResponse, HttpServer,
 };
-use actix_files;
+use anyhow::Result;
 use askama::Template;
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use regex::Regex;
-use anyhow::Result;
-use std::{collections::HashMap, fs, env};
-
+use serde::Deserialize;
+use std::{collections::HashMap, env, fs};
 
 struct Config {
-    content_path: String
+    content_path: String,
 }
 
 impl Config {
     pub fn new() -> Self {
         Self {
             // TODO: Do this with a derive marco?
+            // And add validation with a closure
             content_path: env::var("CONTENT_PATH").unwrap_or("./content".to_string()),
         }
     }
 }
-
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -48,7 +47,7 @@ struct PostListing<'a> {
 struct PostMetadata {
     title: Option<String>,
     description: String,
-    date: DateTime<Utc>,  // Maybe use last modified date on the file?
+    date: DateTime<Utc>, // Maybe use last modified date on the file?
 }
 
 #[get("/")]
@@ -62,7 +61,10 @@ async fn post_listing(posts: web::Data<HashMap<String, InternalPost>>) -> HttpRe
 }
 
 #[get("/posts/{post}/")]
-async fn post<'a>(post: web::Path<String>, posts: web::Data<HashMap<String, InternalPost>>) -> HttpResponse {
+async fn post<'a>(
+    post: web::Path<String>,
+    posts: web::Data<HashMap<String, InternalPost>>,
+) -> HttpResponse {
     let post_name = post.into_inner();
 
     if !posts.contains_key(&post_name) {
@@ -81,29 +83,38 @@ async fn post<'a>(post: web::Path<String>, posts: web::Data<HashMap<String, Inte
         .body(post_template.render().unwrap())
 }
 
-
 // TODO: Add better error handling by returning result?
 fn get_posts(content_path: &str) -> Result<HashMap<String, InternalPost>> {
     let paths = fs::read_dir(content_path)?;
 
     paths.into_iter().try_fold(HashMap::new(), |mut a, d| {
         let path = d?.path();
-        let post_name = path.file_stem().unwrap()
+        let post_name = path
+            .file_stem()
+            .unwrap()
             .to_os_string()
             .into_string()
             .unwrap();
         let content = fs::read_to_string(path)?;
         let re = Regex::new(r"^---([\s\S]*?)(\n---)")?;
-        let metadata = re.captures(&content).expect("Getting metadata from markdown").get(1).unwrap().as_str();
+        let metadata = re
+            .captures(&content)
+            .expect("Getting metadata from markdown")
+            .get(1)
+            .unwrap()
+            .as_str();
         let stripped_content = re.replace(&content, "").into_owned();
 
         let meta_obj = serde_yaml::from_str(metadata)?;
 
-        a.insert(post_name.to_string(), InternalPost {
-            name: post_name.to_string(),
-            content: stripped_content,
-            metadata: meta_obj,
-        });
+        a.insert(
+            post_name.to_string(),
+            InternalPost {
+                name: post_name.to_string(),
+                content: stripped_content,
+                metadata: meta_obj,
+            },
+        );
         Ok(a)
     })
 }
@@ -133,18 +144,20 @@ async fn main() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::get_posts;
+    use actix_web::test;
+
+    use super::*;
 
     #[test]
-    fn test_post_gen() {
+    async fn test_post_gen() {
         let posts = get_posts("./test_content").unwrap();
 
         assert_eq!(posts.len(), 1);
 
-        let post = posts.get("potato").unwrap();
+        let post_obj = posts.get("potato").unwrap();
 
-        assert_eq!(post.name, "potato");
-        assert_eq!(post.metadata.title, Some("imma title".to_string()));
-        assert_eq!(post.metadata.description, "imma description");
+        assert_eq!(post_obj.name, "potato");
+        assert_eq!(post_obj.metadata.title, Some("imma title".to_string()));
+        assert_eq!(post_obj.metadata.description, "imma description");
     }
 }
