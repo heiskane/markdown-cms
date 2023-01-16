@@ -6,7 +6,22 @@ use askama::Template;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use regex::Regex;
-use std::{collections::HashMap, fs};
+use anyhow::Result;
+use std::{collections::HashMap, fs, env};
+
+
+struct Config {
+    content_path: String
+}
+
+impl Config {
+    pub fn new() -> Self {
+        Self {
+            // TODO: Do this with a derive marco?
+            content_path: env::var("CONTENT_PATH").unwrap_or("./content".to_string()),
+        }
+    }
+}
 
 
 #[derive(Template)]
@@ -68,29 +83,28 @@ async fn post<'a>(post: web::Path<String>, posts: web::Data<HashMap<String, Inte
 
 
 // TODO: Add better error handling by returning result?
-fn get_posts(content_path: &str) -> HashMap<String, InternalPost> {
-    let paths = fs::read_dir(content_path).unwrap();
+fn get_posts(content_path: &str) -> Result<HashMap<String, InternalPost>> {
+    let paths = fs::read_dir(content_path)?;
 
-    paths.into_iter().fold(HashMap::new(), |mut a, d| {
-        let path = d.unwrap().path();
-        let post_name = path.file_stem()
-            .unwrap()
+    paths.into_iter().try_fold(HashMap::new(), |mut a, d| {
+        let path = d?.path();
+        let post_name = path.file_stem().unwrap()
             .to_os_string()
             .into_string()
             .unwrap();
-        let content = fs::read_to_string(path).unwrap();
-        let re = Regex::new(r"^---([\s\S]*?)(\n---)").unwrap();
+        let content = fs::read_to_string(path)?;
+        let re = Regex::new(r"^---([\s\S]*?)(\n---)")?;
         let metadata = re.captures(&content).expect("Getting metadata from markdown").get(1).unwrap().as_str();
         let stripped_content = re.replace(&content, "").into_owned();
 
-        let meta_obj = serde_yaml::from_str(metadata).unwrap();
+        let meta_obj = serde_yaml::from_str(metadata)?;
 
         a.insert(post_name.to_string(), InternalPost {
             name: post_name.to_string(),
             content: stripped_content,
             metadata: meta_obj,
         });
-        a
+        Ok(a)
     })
 }
 
@@ -99,7 +113,10 @@ async fn main() -> std::io::Result<()> {
     // access logs are printed with the INFO level so ensure it is enabled by default
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let posts = web::Data::new(get_posts("./content"));
+    let config = Config::new();
+
+    let post_map = get_posts(&config.content_path).expect("Getting posts");
+    let posts = web::Data::new(post_map);
 
     HttpServer::new(move || {
         App::new()
@@ -120,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_post_gen() {
-        let posts = get_posts("./test_content");
+        let posts = get_posts("./test_content").unwrap();
 
         assert_eq!(posts.len(), 1);
 
