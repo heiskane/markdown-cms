@@ -7,20 +7,11 @@ use askama::Template;
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::Deserialize;
-use std::{collections::HashMap, env, fs};
+use std::{collections::HashMap, fs};
 
+#[derive(Deserialize)]
 struct Config {
     content_path: String,
-}
-
-impl Config {
-    pub fn new() -> Self {
-        Self {
-            // TODO: Do this with a derive marco?
-            // And add validation with a closure
-            content_path: env::var("CONTENT_PATH").unwrap_or("./content".to_string()),
-        }
-    }
 }
 
 #[derive(Template)]
@@ -43,6 +34,47 @@ struct PostListing<'a> {
     posts: Vec<&'a InternalPost>,
 }
 
+/// Metadata for a post
+///
+/// Struct containing the metadata of a post. This struct is
+/// constructed from yaml that is read from the posts markdown file.
+///
+///
+/// # Examples
+/// Example markdown file containing metadata:
+/// ```md
+/// ---
+/// title: this is a title
+/// description: this is the description
+/// date: this should be the posting date
+/// ---
+///
+/// # Title
+/// just normal markdown here
+/// ```
+///
+/// Get metadata from the markdown like this:
+/// ```rust
+/// // read the markdown file
+/// let content = fs::read_to_string(path)?;
+///
+/// // regex to get metadata block from markdown
+/// let re = Regex::new(r"^---([\s\S]*?)(\n---)")?;
+///
+/// // save metadata yaml to a variable
+/// let metadata = re
+///     .captures(&content)
+///     .expect("Getting metadata from markdown")
+///     .get(1)
+///     .unwrap()
+///     .as_str();
+///
+/// // strip metadata from markdown
+/// let stripped_content = re.replace(&content, "").into_owned();
+///
+/// // create the metadata object from yaml
+/// let meta_obj = serde_yaml::from_str(metadata)?;
+/// ```
 #[derive(Deserialize)]
 struct PostMetadata {
     title: Option<String>,
@@ -124,7 +156,7 @@ async fn main() -> std::io::Result<()> {
     // access logs are printed with the INFO level so ensure it is enabled by default
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let config = Config::new();
+    let config = envy::from_env::<Config>().unwrap();
 
     let post_map = get_posts(&config.content_path).expect("Getting posts");
     let posts = web::Data::new(post_map);
@@ -144,6 +176,7 @@ async fn main() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+
     use actix_web::test;
 
     use super::*;
@@ -158,6 +191,7 @@ mod tests {
 
         assert_eq!(post_obj.name, "potato");
         assert_eq!(post_obj.metadata.title, Some("imma title".to_string()));
+
         assert_eq!(post_obj.metadata.description, "imma description");
     }
 }
