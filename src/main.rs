@@ -9,9 +9,15 @@ use regex::Regex;
 use serde::Deserialize;
 use std::{collections::HashMap, fs};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "UPPERCASE")]
 struct Config {
+    #[serde(default = "default_path")]
     content_path: String,
+}
+
+fn default_path() -> String {
+    "./content".to_string()
 }
 
 #[derive(Template)]
@@ -115,7 +121,6 @@ async fn post<'a>(
         .body(post_template.render().unwrap())
 }
 
-// TODO: Add better error handling by returning result?
 fn get_posts(content_path: &str) -> Result<HashMap<String, InternalPost>> {
     let paths = fs::read_dir(content_path)?;
 
@@ -127,6 +132,7 @@ fn get_posts(content_path: &str) -> Result<HashMap<String, InternalPost>> {
             .to_os_string()
             .into_string()
             .unwrap();
+
         let content = fs::read_to_string(path)?;
         let re = Regex::new(r"^---([\s\S]*?)(\n---)")?;
         let metadata = re
